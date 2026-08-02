@@ -120,21 +120,22 @@ produces the same target structure (a four-field verdict: consensus /
 divergence / blindspots / verdict). They differ only in \emph{how} the work is
 organized.
 
-\begin{table}[h]
+\begin{table}[ht!]
 \centering
 \small
+\renewcommand{\arraystretch}{1.15}
 \caption{The five execution strategies. ``Cost'' is the number of API calls.
 ``Isolates'' names the single factor each step is designed to attribute.}
 \label{tab:modes}
-\begin{tabularx}{\textwidth}{@{}lXcc@{}}
+\begin{tabularx}{\textwidth}{@{}p{2.5cm}Xcc@{}}
 \toprule
 \textbf{Mode} & \textbf{What it does} & \textbf{Cost} & \textbf{Isolates} \\
 \midrule
-\textbf{M1} single-shot        & One call; doc + question in the prompt                                                        & 1   & baseline \\
-\textbf{M1R} single + retry    & Same as M1, but retries on empty/bad output ($\leq$4 attempts)                                 & 1--4 & the contribution of \textbf{retry} alone \\
-\textbf{M2} single-model pipeline & extract~$\rightarrow$~analyze~$\rightarrow$~judge, all with one model                       & 3   & the contribution of \textbf{task decomposition} beyond retry \\
-\textbf{M3} multi-model Panel+Judge & extract, then 2 models analyze in parallel, then a Judge synthesizes                  & 4   & the contribution of \textbf{multiple models} beyond a single-model pipeline \\
-\textbf{M4} single-model self-critique & answer~$\rightarrow$~critique~$\rightarrow$~revise, one model                          & 3   & whether \textbf{self-reflection} matches multi-model \\
+\textbf{M1} single-shot & One call; doc + question in the prompt & 1 & baseline \\
+\textbf{M1R} single + retry & Same as M1, but retries on empty/bad output ($\leq$4 attempts) & 1--4 & contribution of \textbf{retry} alone \\
+\textbf{M2} single-model pipeline & extract~$\rightarrow$~analyze~$\rightarrow$~judge, all one model & 3 & contribution of \textbf{task decomposition} beyond retry \\
+\textbf{M3} multi-model Panel+Judge & extract, then 2 models analyze in parallel, then a Judge synthesizes & 4 & contribution of \textbf{multiple models} beyond pipeline \\
+\textbf{M4} single-model self-critique & answer~$\rightarrow$~critique~$\rightarrow$~revise, one model & 3 & whether \textbf{self-reflection} matches multi-model \\
 \bottomrule
 \end{tabularx}
 \end{table}
