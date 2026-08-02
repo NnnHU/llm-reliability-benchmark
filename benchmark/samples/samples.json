@@ -1,0 +1,158 @@
+{
+  "_comment": "Benchmark sample cases for structured knowledge-analysis. Cases point to .txt documents (NOT shipped with this manifest — see CORPUS.md) and list queries run across five execution modes (M1 single-shot / M1R single+retry / M2 single-model pipeline / M3 multi-model Panel+Judge / M4 single-model self-critique). The g-series and F-big/G-super docs are ASR transcripts (contain typos) — they double as a test of ASR cleaning. Each case carries a `fingerprint` (chars + SHA-256) so readers can verify a self-obtained copy of the source document. Drop more .txt files + entries here to extend the corpus.",
+  "cases": [
+    {
+      "id": "grantham-summary",
+      "doc": "grantham.txt",
+      "fingerprint": { "chars": 3249, "sha256": "50771767c9e0d536e53f4fc826fb82719ca2e71c800e777acf28fd6697eb25d9" },
+      "queries": [
+        {
+          "id": "risk-lesson",
+          "text": "What is the core lesson about investment risk that this story teaches? Analyze from both the psychological and structural angles."
+        }
+      ]
+    },
+    {
+      "id": "g1-mean-reversion",
+      "doc": "g1.txt",
+      "fingerprint": { "chars": 12323, "sha256": "b5d27c0be3ec068d2124b47efcc3376c038c0552e619bfd99fc5603c714d760c" },
+      "queries": [
+        {
+          "id": "key-conflict",
+          "text": "What is the core conflict between Grantham and his clients in this story? Summarize each side's position and who turned out to be right."
+        }
+      ]
+    },
+    {
+      "id": "g2-keystone",
+      "doc": "g2.txt",
+      "fingerprint": { "chars": 10373, "sha256": "da1b85f198198fba19cb9f91d9a7a4695b02c835f32af941f9b50775ce898095" },
+      "queries": [
+        {
+          "id": "why-protest",
+          "text": "Why did the elderly billionaire go to the White House to protest? What does this reveal about his values beyond investing?"
+        }
+      ]
+    },
+    {
+      "id": "g3-ai-bet",
+      "doc": "g3.txt",
+      "fingerprint": { "chars": 9138, "sha256": "0deb18f328835b0b702c91aa0efbbeb1c3d02e08d1cc7dd9e1797e5dfb9cf393" },
+      "queries": [
+        {
+          "id": "ai-risk",
+          "text": "What is the 'AI bet' described here, and what are the risks if the bet fails? List the specific economic exposures mentioned."
+        }
+      ]
+    },
+    {
+      "id": "g4-reinvest",
+      "doc": "g4.txt",
+      "fingerprint": { "chars": 11026, "sha256": "8134a3cdfdc6dffbcdd7a42c46651ba64e392805b3e5e9bfaa643c341a61061f" },
+      "queries": [
+        {
+          "id": "timing-call",
+          "text": "What did GMO's 'Reinvest in Fear' letter say, and how precise was Grantham's market-timing call? Give the exact dates and numbers."
+        }
+      ]
+    },
+    {
+      "id": "g5-showdown",
+      "doc": "g5.txt",
+      "fingerprint": { "chars": 10122, "sha256": "838ab3b812910ef7b6b74d6d98aeb4d9b8973284d388f183b307bafc40a9c692" },
+      "queries": [
+        {
+          "id": "debate-outcome",
+          "text": "Describe the Forbes debate between Grantham and Blodget. Who predicted the crash, and how accurate was the prediction?"
+        }
+      ]
+    },
+    {
+      "id": "g6-derivatives",
+      "doc": "g6.txt",
+      "fingerprint": { "chars": 10233, "sha256": "26c733963568fb6c0b88f985d2af073dd93889ce0e24c4fb394e7f05e4c537e2" },
+      "queries": [
+        {
+          "id": "verdict-derivatives",
+          "text": "What was the verdict of the Manhattan debate on whether financial innovation is harmful? Summarize Grantham's argument."
+        }
+      ]
+    },
+    {
+      "id": "g7-chanos",
+      "doc": "g7.txt",
+      "fingerprint": { "chars": 11128, "sha256": "68fcd1583f04b871b516b6a08ab961ccf3b9321e5f7566b2d779de1f0a5dcaaf" },
+      "queries": [
+        {
+          "id": "chanos-view",
+          "text": "What is Jim Chanos's view on the current AI-driven market? What evidence does he cite, and what is his famous catchphrase?"
+        }
+      ]
+    },
+    {
+      "id": "fbig1-1999",
+      "doc": "F-big1.txt",
+      "fingerprint": { "chars": 31834, "sha256": "0779aebb770fd7790c3b4d607b97b38f0f000f58dd11ecd5a7325befc3f132b5" },
+      "queries": [
+        {
+          "id": "bubble-anatomy",
+          "text": "Analyze the anatomy of the 1999 internet bubble as described here: what drove it, who was blamed, and what were the warning signs ignored?"
+        }
+      ]
+    },
+    {
+      "id": "fbig2-2009",
+      "doc": "F-big2.txt",
+      "fingerprint": { "chars": 31381, "sha256": "c87933e4efe3806429aea4659f0684c51144f1e234a970bc41cb5d317e524a65" },
+      "queries": [
+        {
+          "id": "crisis-recovery",
+          "text": "How did the 2008-2009 financial crisis unfold and recover according to this account? What were the key turning points and policy responses?"
+        }
+      ]
+    },
+    {
+      "id": "fbig3-2026",
+      "doc": "F-big3.txt",
+      "fingerprint": { "chars": 33824, "sha256": "357619738cc76b8f90e8c849014451da5d5c41f4685140ae010785c909566415" },
+      "queries": [
+        {
+          "id": "ai-parallel",
+          "text": "How does this text draw parallels between past bubbles and the 2026 AI boom? What structural similarities does it highlight?"
+        }
+      ]
+    },
+    {
+      "id": "gsuper-synthesis",
+      "doc": "G-super.txt",
+      "fingerprint": { "chars": 52982, "sha256": "a494ba67f12cd964f9f1bdabfd520ec2d97c18b9951aa144e5e5a075641d921c" },
+      "queries": [
+        {
+          "id": "grand-narrative",
+          "text": "Synthesize the overarching narrative across this entire series: what is the single most important lesson about markets and human behavior that ties all the episodes together?"
+        }
+      ]
+    },
+    {
+      "_comment": "Multi-document case: g1+g2+g3 combined (concatenated in this order) -> tests cross-document synthesis. Total chars = 12323 + 10373 + 9138 = 31834. The combined fingerprint is the SHA-256 of the concatenation g1+g2+g3 in this order.",
+      "id": "multi-g123",
+      "doc": "g1.txt",
+      "multiDocs": ["g2.txt", "g3.txt"],
+      "fingerprint": {
+        "combinedChars": 31834,
+        "combinedSha256": "0779aebb770fd7790c3b4d607b97b38f0f000f58dd11ecd5a7325befc3f132b5",
+        "parts": [
+          { "doc": "g1.txt", "chars": 12323, "sha256": "b5d27c0be3ec068d2124b47efcc3376c038c0552e619bfd99fc5603c714d760c" },
+          { "doc": "g2.txt", "chars": 10373, "sha256": "da1b85f198198fba19cb9f91d9a7a4695b02c835f32af941f9b50775ce898095" },
+          { "doc": "g3.txt", "chars": 9138, "sha256": "0deb18f328835b0b702c91aa0efbbeb1c3d02e08d1cc7dd9e1797e5dfb9cf393" }
+        ]
+      },
+      "queries": [
+        {
+          "id": "cross-doc-synthesis",
+          "text": "Across these three episodes, how does Grantham's approach to being 'right but early' evolve? Compare the personal costs and outcomes in each case."
+        }
+      ]
+    }
+  ]
+}

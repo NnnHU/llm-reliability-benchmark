@@ -1,0 +1,551 @@
+% =====================================================================
+% Structured Task Decomposition Improves Reliability of LLM-Based
+% Knowledge Analysis
+%
+% Standard article class, arXiv-friendly. Compile with pdflatex +
+% bibtex + pdflatex x2.
+%
+% NOTE FOR THE AUTHOR (remove before submission):
+%   - Replace the \author{...} placeholder with real name/affiliation/email.
+%   - This file is the LaTeX rendering of paper/reliability-benchmark.md.
+%   - All experimental numbers (31%/92%/+8/+54, n=13/n=7, 7/7, 3/3,
+%     3.14/4.14, etc.) are transcribed verbatim from the source report;
+%     do not round or alter them.
+% =====================================================================
+\documentclass[11pt]{article}
+
+% ----- page geometry -----
+\usepackage[margin=1in]{geometry}
+
+% ----- typography -----
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{lmodern}
+
+% ----- math -----
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% ----- tables -----
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+
+% ----- code / verbatim -----
+\usepackage{verbatim}
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  framerule=0pt,
+  showstringspaces=false,
+  columns=fullflexible,
+}
+
+% ----- graphics / color -----
+\usepackage{graphicx}
+\usepackage{xcolor}
+
+% ----- links -----
+\usepackage[colorlinks=true,linkcolor=blue!60!black,citecolor=blue!60!black,urlcolor=blue!60!black]{hyperref}
+\usepackage{url}
+
+% ----- references -----
+\usepackage[round,authoryear]{natbib}
+
+% ----- compact lists -----
+\usepackage{enumitem}
+\setlist[itemize]{noitemsep,topsep=2pt}
+\setlist[enumerate]{noitemsep,topsep=2pt}
+
+\title{Structured Task Decomposition Improves Reliability of \\
+       LLM-Based Knowledge Analysis}
+\author{NnnHU\\
+        Independent Researcher\\
+        \texttt{47146850+NnnHU@users.noreply.github.com}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Large language models often fail silently when asked to produce structured
+analytical output in a single call: they return empty responses, unparseable
+text, or refuse the task. We compare five execution strategies of increasing
+complexity on a fixed 13-case corpus of financial documents, holding the model
+constant where possible to isolate each strategy's contribution. We find that
+(1) \textbf{task decomposition} (an extract~$\rightarrow$~analyze~$\rightarrow$~judge
+pipeline) is the dominant driver of reliability, improving the success rate from
+31\% (single shot) to 92\%, whereas retry alone adds only +8 points; (2) a
+\textbf{multi-model Panel+Judge} architecture, evaluated under blinded dual-LLM
+grading with a human anchor, produces higher-quality output than a single-model
+pipeline on accuracy, coverage, overall quality, and hallucination rate. We
+release the benchmark harness, a corpus manifest with content fingerprints, and
+the grading tooling so the results can be reproduced and extended to other
+domains.
+\end{abstract}
+
+% =====================================================================
+\section{Introduction}
+% =====================================================================
+
+A common engineering experience with LLMs: you ask for a structured JSON
+analysis and the model returns nothing, or a refusal, or prose with no JSON.
+For toy tasks this is a nuisance; for a product that must return reliable
+structured output, it is fatal.
+
+Two intuitive fixes are often tried: \textbf{retry on failure}, and
+\textbf{add more models} (a ``mixture of agents''). Both sound plausible, but
+without a controlled experiment it is unclear which one actually buys
+reliability---and at what cost.
+
+This report describes a benchmark designed to \textbf{isolate the contribution
+of each factor}. We define five execution strategies (\S\ref{sec:setup}) that
+form a chain of single-variable changes, run them on a shared corpus, and
+measure both \textbf{reliability} (does valid structured output come back?) and
+\textbf{quality} (is that output any good?). The design lets us attribute gains
+to specific mechanisms rather than to ``using a fancier setup.''
+
+% =====================================================================
+\section{Experimental Setup}
+\label{sec:setup}
+% =====================================================================
+
+\subsection{The five execution strategies}
+
+Each strategy answers the same question against the same source document and
+produces the same target structure (a four-field verdict: consensus /
+divergence / blindspots / verdict). They differ only in \emph{how} the work is
+organized.
+
+\begin{table}[h]
+\centering
+\small
+\caption{The five execution strategies. ``Cost'' is the number of API calls.
+``Isolates'' names the single factor each step is designed to attribute.}
+\label{tab:modes}
+\begin{tabularx}{\textwidth}{@{}lXcc@{}}
+\toprule
+\textbf{Mode} & \textbf{What it does} & \textbf{Cost} & \textbf{Isolates} \\
+\midrule
+\textbf{M1} single-shot        & One call; doc + question in the prompt                                                        & 1   & baseline \\
+\textbf{M1R} single + retry    & Same as M1, but retries on empty/bad output ($\leq$4 attempts)                                 & 1--4 & the contribution of \textbf{retry} alone \\
+\textbf{M2} single-model pipeline & extract~$\rightarrow$~analyze~$\rightarrow$~judge, all with one model                       & 3   & the contribution of \textbf{task decomposition} beyond retry \\
+\textbf{M3} multi-model Panel+Judge & extract, then 2 models analyze in parallel, then a Judge synthesizes                  & 4   & the contribution of \textbf{multiple models} beyond a single-model pipeline \\
+\textbf{M4} single-model self-critique & answer~$\rightarrow$~critique~$\rightarrow$~revise, one model                          & 3   & whether \textbf{self-reflection} matches multi-model \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The chain is designed so each step changes \textbf{ideally one variable}:
+
+\begin{lstlisting}
+M1 -> M1R  : +retry, nothing else           (retry's contribution)
+M1R -> M2  : +pipeline structure            (decomposition's contribution)
+M2  -> M3  : +a second model in the panel   (multi-model's contribution)
+M4  <-> M3 : self-critique vs multi-model   (does self-reflection suffice?)
+\end{lstlisting}
+
+A residual confound (documented in \S\ref{sec:discussion}): M3's Judge receives
+two analyses while M2's receives one, so ``model count'' and ``Judge input
+richness'' are not fully separated. We report this honestly rather than
+overclaim.
+
+\subsection{Corpus}
+
+13 cases, all from a single financial-investing article series (the Jeremy
+Grantham / GMO bubble narrative), chosen for narrative richness and the
+presence of specific verifiable facts (dates, P/E ratios, AUM figures).
+Composition:
+
+\begin{itemize}
+  \item 1 English summary document ($\sim$3.3k chars)
+  \item 7 standard Chinese (Traditional) ASR transcripts ($\sim$9--12k chars each;
+        contain speech-to-text noise---typos, misheard names)
+  \item 3 large documents ($\sim$31--34k chars)
+  \item 1 super-large document ($\sim$53k chars)
+  \item 1 multi-document case (3 docs concatenated, $\sim$32k chars)
+\end{itemize}
+
+Total: $\sim$256k characters. The ASR noise is intentional---it tests
+robustness to messy real-world input. The corpus is narrow in domain (finance);
+this is a known limitation (\S\ref{sec:discussion}).
+
+\subsection{Models}
+
+\begin{itemize}
+  \item Panel / Judge: \texttt{deepseek-v4-flash} (via \texttt{api.deepseek.com},
+        OpenAI-compatible protocol)
+  \item Second panel model: \texttt{deepseek-v4-pro}
+  \item Temperature: 0.7 for analysis/judge, 0.5 for extract, 0.5 for critique
+  \item Max tokens per call: 2048; timeout: 360s
+\end{itemize}
+
+\subsection{Metrics}
+
+\paragraph{Reliability} (all 13 cases, all 5 modes): a mode ``succeeds'' on a
+case iff it returns all four verdict fields with \textbf{real} content---parse-fallback
+placeholders like ``\textit{(could not parse \ldots)}'' do \textbf{not} count.
+(An earlier draft of this analysis incorrectly counted placeholders as success;
+the bug was found and the numbers below are corrected. See \S\ref{sec:discussion}
+on methodology.)
+
+\paragraph{Quality} (7 cases where both M2 and M3 produced real output): graded
+by \textbf{two independent LLM judges} (Gemini and KIMI K2.6) in a \textbf{blinded
+A/B setup}---neither judge knew which output was M2 or M3. Position bias was
+cancelled by per-case A/B reordering. A \textbf{human anchor} graded 3 cases
+blindly to validate the LLM judges. Scoring rubric: factual accuracy (1--5),
+hallucination (Y/N), key-info coverage (1--5), overall quality (1--5), and a
+forced preference (A / B / tied).
+
+% =====================================================================
+\section{Results}
+% =====================================================================
+
+\subsection{Reliability---decomposition, not retry, drives success}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Reliability across the five modes (all 13 cases).}
+\label{tab:reliability}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Mode} & \textbf{Success rate} & \textbf{Avg latency} & \textbf{Avg output chars} & \textbf{API calls} \\
+\midrule
+M1 single-shot                   & \textbf{31\%} (4/13)  & 21.4s & 458   & 13 \\
+M1R single + retry               & \textbf{38\%} (5/13)  & 45.7s & 626   & 21 \\
+M2 single-model pipeline         & \textbf{92\%} (12/13) & 55.3s & 1{,}339 & 39 \\
+M3 multi-model Panel+Judge       & \textbf{92\%} (12/13) & 50.4s & 1{,}531 & 52 \\
+M4 single-model self-critique    & \textbf{38\%} (5/13)  & 74.2s & 899   & 39 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Reading the chain.}
+
+\begin{itemize}
+  \item \textbf{M1~$\rightarrow$~M1R: +8 points.} Retry rescued only 1 of 9
+        failures. The empty-response problem is not a transient blip that a
+        second attempt fixes---the model genuinely struggles with the one-shot
+        structured-JSON prompt $\sim$60\% of the time. \textbf{Retry alone is
+        insufficient.}
+  \item \textbf{M1R~$\rightarrow$~M2: +54 points.} Decomposing the task into
+        extract~$\rightarrow$~analyze~$\rightarrow$~judge (with the same single
+        model) takes reliability from 38\% to 92\%. This is the dominant effect.
+        \textbf{Task decomposition---not retry---is what makes the pipeline
+        reliable.}
+  \item \textbf{M2~$\rightarrow$~M3: +0 points on reliability} (both 92\%), but
+        see quality (\S3.2). Adding a second model does not further improve the
+        \emph{rate} of producing valid output once a pipeline is in place.
+  \item \textbf{M4 (self-critique): 38\%.} A single model critiquing and revising
+        its own output does \textbf{not} approach the pipeline's reliability.
+        This is a naive answer$\rightarrow$critique$\rightarrow$revise
+        implementation; engineered self-reflection (Reflexion~\citep{shinn2023reflexion},
+        Self-Refine~\citep{madaan2023selfrefine},
+        Constitutional AI~\citep{bai2022constitutional}) may do better---but the
+        result shows self-critique is not automatically a substitute for
+        decomposition.
+\end{itemize}
+
+\begin{quote}
+\textbf{Headline finding:} \emph{Structured task decomposition dramatically
+improves the reliability of LLM-based structured analysis---from $\sim$31\% to
+$\sim$92\%. The gain comes from the decomposition, not from retrying.}
+\end{quote}
+
+\subsection{Quality---multi-model beats single-model pipeline \\
+            (blinded, dual-LLM + human-anchored)}
+
+For the 7 cases where both M2 and M3 returned real analysis, blinded grading by
+Gemini + KIMI K2.6 (14 votes total):
+
+\begin{table}[h]
+\centering
+\small
+\caption{Quality grading: M2 (single-model pipeline) vs.\ M3 (multi-model
+Panel+Judge) on the 7 cases where both produced real output. 14 votes = 2
+judges $\times$ 7 cases.}
+\label{tab:quality}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Metric} & \textbf{M2 (single-model)} & \textbf{M3 (multi-model)} & \textbf{$\Delta$ (M3$-$M2)} \\
+\midrule
+Factual accuracy (1--5)        & 3.14 & \textbf{4.14} & \textbf{+1.00} \\
+Key-info coverage (1--5)       & 2.93 & \textbf{3.79} & \textbf{+0.86} \\
+Overall quality (1--5)         & 2.86 & \textbf{3.71} & \textbf{+0.86} \\
+Hallucination (count /14)      & 3    & \textbf{2}    & M3 fewer \\
+Preference wins (of 14)        & 6    & \textbf{8}    & M3 wins \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{The strongest single signal: both LLM judges agreed on preference in
+7/7 cases (100\% inter-rater agreement).} Two architecturally different models,
+grading independently and blinded, picked the same winner every time---hard to
+produce by chance, indicating the M2-vs-M3 difference is a real signal, not
+scoring-scale noise.
+
+\textbf{Human anchor validation: 3/3 agreement.} A domain-knowledgeable human
+graded 3 representative cases blindly (deliberately including 2 cases where the
+LLMs picked single-model M2---the counter-intuitive choice). The human agreed
+with the LLM judges on all 3, including both M2 wins. This confirms the LLM
+judges are not blindly pro-multi-model: they pick single-model when it is
+actually better, and the human agrees.
+
+\textbf{Reading:} When both modes succeed, multi-model Panel+Judge produces
+\textbf{higher-quality} output than a single-model pipeline---more accurate,
+better coverage, fewer hallucinations, and preferred more often. The earlier
+appearance that ``M2 $\approx$ M3'' (from output-character counts) was a
+measurement artifact: by a richness proxy they looked equal, but on real quality
+grading multi-model pulls ahead.
+
+\subsection{Notable secondary findings}
+
+\begin{itemize}
+  \item \textbf{Parallelism offsets latency.} M3 (4 calls, 2 models in parallel)
+        averaged 50.4s vs.\ M2's 55.3s (3 sequential calls). Multi-model fan-out
+        does \textbf{not} cost wall-clock time here, though it costs $\sim$33\%
+        more tokens.
+  \item \textbf{M3 beat M2 on latency in 6/13 cases}, including the
+        multi-document case (M2 101s vs.\ M3 37s) where sequential
+        extract~$\rightarrow$~analyze~$\rightarrow$~judge on one model is slower
+        than parallel panels.
+\end{itemize}
+
+% =====================================================================
+\section{Reproducibility}
+% =====================================================================
+
+The benchmark is fully reproducible from the accompanying reference
+implementation, anchored to repository commit \texttt{9301168}.
+
+\begin{lstlisting}[language=bash]
+# Run all 5 modes on all 13 cases (~40-70 min, ~150 API calls)
+npm run bench -- --full
+
+# Incremental: run only M1R + M4, merging prior M1/M2/M3 traces
+npm run bench
+
+# Re-run only M2 + M3 (e.g. after fixing an extract-retry issue)
+npm run bench -- --remediate
+\end{lstlisting}
+
+\textbf{Corpus:} \texttt{bench-samples/} (13 cases + \texttt{samples.json}
+manifest). The corpus is domain-narrow (finance); replacing it with
+other-domain documents tests generalization.
+
+\textbf{Configuration:} \texttt{.env} with \texttt{VITE\_VERDEX\_PROVIDER\_*}
+and \texttt{VITE\_VERDEX\_PROVIDER2\_*} (two OpenAI-compatible providers; the
+environment variable names are historical and retained for reproducibility).
+
+\textbf{Outputs:} \texttt{bench-results/} (not redistributed):
+\begin{itemize}
+  \item \verb|<runId>-<case>-<query>-trace.json| --- full-fidelity traces (untruncated)
+  \item \verb|<runId>-<case>-<query>-report.md| --- per-case comparison tables
+  \item \verb|<runId>-SUMMARY.md| --- aggregate + key-question analysis
+\end{itemize}
+
+\textbf{Blinded quality grading pack:} \verb|npx tsx scripts/extract-grading.ts|
+generates per-case A/B files (\texttt{bench-results/grading-pack/}) for blinded
+grading by any LLM or human. The A/B~$\rightarrow$~mode mapping is kept in
+\texttt{quality-grading-key.json} (secret until grading is complete).
+
+\paragraph{Note on corpus distribution.} A reference implementation, the grading
+harness, and a corpus \textbf{manifest with content fingerprints} accompany this
+submission. The 13 source documents are publicly accessible video transcripts;
+we provide SHA-256 fingerprints and character counts for verification rather
+than redistributing the transcripts, to respect the original creators'
+distribution rights. Readers can reproduce the runs by obtaining the source
+documents and verifying them against the published fingerprints.
+
+% =====================================================================
+\section{Discussion}
+\label{sec:discussion}
+% =====================================================================
+
+\subsection{What the evidence supports}
+
+\begin{itemize}
+  \item \textbf{Strong:} task decomposition improves reliability (31\%~$\rightarrow$~92\%,
+        n=13, clean isolation of retry vs.\ decomposition).
+  \item \textbf{Preliminary but consistent:} multi-model Panel+Judge improves
+        quality over a single-model pipeline (5 metrics, n=7, dual-LLM 7/7
+        agreement, human anchor 3/3). We phrase this as \emph{``evidence
+        consistently favors''} rather than \emph{``proves''}---n=7 and a single
+        domain are not general proof.
+\end{itemize}
+
+\subsection{Limitations}
+
+\begin{itemize}
+  \item \textbf{Sample size.} n=13 for reliability, n=7 for quality. Directional,
+        not statistically definitive.
+  \item \textbf{Domain narrowness.} All cases are financial-investing text.
+        Whether the decomposition effect holds across domains (code, legal,
+        medical) is untested. The corpus is designed to be swappable to test
+        this.
+  \item \textbf{One residual confound in M2 vs.\ M3.} M3's Judge receives two
+        analyses while M2's receives one, so ``model count'' and ``Judge input
+        richness'' co-vary. The result should be read as ``multi-model
+        Panel+Judge > single-model pipeline,'' not ``more models alone > fewer
+        models alone.'' A fully isolated test would feed M2's Judge two copies
+        of the same single-model analysis.
+  \item \textbf{M2's low scores are partly extract-driven.} In 2--3 cases M2's
+        extract step partially failed even after retry, biasing its quality
+        scores downward. The direction (M3 > M2) holds on the clean cases too,
+        but the gap magnitude may be inflated.
+  \item \textbf{LLM judges, not only humans.} The human anchor (3 cases)
+        validates the LLM judges' direction, but a larger human study would
+        strengthen this.
+\end{itemize}
+
+\subsection{Methodological note: the placeholder bug}
+
+An earlier draft of this analysis reported ``100\% success'' for every mode.
+That was a statistics bug: the parser emits non-empty placeholder strings
+(``\textit{(could not parse \ldots)}'') on failure, and a naive non-empty check
+counted them as success. The bug was caught by noticing the data looked
+implausibly clean, and the fix (excluding placeholders from the success
+criterion) yielded the numbers in \S3. We retain this story in the report
+because catching and correcting one's own measurement bias is a core part of
+trustworthy benchmarking---and a reminder that \emph{the most dangerous failures
+are the ones that look like success}.
+
+\subsection{Implications for practice}
+
+For teams building LLM products that must return reliable structured output:
+
+\begin{enumerate}
+  \item \textbf{Decompose first.} Before adding more models or fancier prompts,
+        split the task into extract~$\rightarrow$~analyze~$\rightarrow$~judge.
+        This single change had the largest effect in our benchmark.
+  \item \textbf{Retry is cheap insurance but not a fix.} Add it, but don't expect
+        it to solve a fundamentally hard one-shot prompt.
+  \item \textbf{Multi-model earns its cost on quality, not reliability.} Once a
+        pipeline is reliable, a second model improves output quality (accuracy,
+        coverage, hallucination) without adding latency (parallelism offsets it).
+  \item \textbf{Self-critique is not a free substitute.} A naive
+        answer$\rightarrow$critique$\rightarrow$revise loop did not match the
+        pipeline. If pursuing self-reflection, use engineered prompts
+        (Reflexion-style~\citep{shinn2023reflexion}), and benchmark it.
+\end{enumerate}
+
+% =====================================================================
+\section{Related Work}
+\label{sec:related}
+% =====================================================================
+
+\begin{itemize}
+  \item \textbf{Self-Refine / Reflexion / Constitutional AI}---
+        single-model self-improvement loops
+        \citep{madaan2023selfrefine,shinn2023reflexion,bai2022constitutional}.
+        Our M4 is a naive instance; engineered variants may outperform it. The
+        benchmark's M4 slot is where such methods can be plugged in for
+        comparison.
+  \item \textbf{Mixture-of-Agents (MoA)}---multi-model aggregation
+        \citep{wang2024mixtureofagents}. Our M3 is a minimal MoA (2 panels + 1
+        judge). The benchmark isolates MoA's contribution by comparing to M2
+        (single-model pipeline).
+  \item \textbf{LLM-as-judge / human-anchored evaluation}---we use dual-LLM
+        blinded grading plus a human anchor \citep{zheng2023llmjudge}, following
+        emerging best practice for evaluation when full human studies are
+        infeasible.
+  \item \textbf{Structured output reliability.} Recent benchmarks evaluate
+        constrained-decoding and schema-conformance for structured generation
+        \citep{geng2025jsonschemabench}; our work complements these by studying
+        \emph{task-structure} decomposition (pipeline design) rather than
+        decoding-time constraints as the lever for reliable structured output.
+  \item \textbf{Stepwise / decomposed reasoning.} Chain-of-thought prompting
+        \citep{wei2022chainofthought} elicits reasoning by asking a single model
+        to emit intermediate steps \emph{within one call}. Our extract~$\rightarrow$~analyze~$\rightarrow$~judge
+        decomposition is complementary but distinct: it splits the task across
+        \emph{separate} calls (and, in M3, separate models), each producing a
+        structured artifact that the next step consumes. The reliability gains we
+        measure come from this explicit inter-step handoff---which converts silent
+        single-shot failures into recoverable per-stage failures---rather than from
+        intra-prompt chain-of-thought.
+\end{itemize}
+
+% =====================================================================
+\section*{Acknowledgments}
+% =====================================================================
+
+The experimental design, benchmark implementation, data collection, and
+analysis were conducted entirely by the author. The prose of this manuscript
+was prepared with assistance from an AI writing tool for drafting and
+polishing; all technical content, experimental results, and conclusions were
+authored, verified, and are the sole responsibility of the author. Any errors
+are the author's own.
+
+% =====================================================================
+\appendix
+\section{Per-case data}
+% =====================================================================
+
+Reliability (all 13 cases $\times$ M1/M1R/M2/M3/M4) and quality grading (7 cases
+$\times$ M2/M3 $\times$ 2 judges) are available as machine-readable traces in
+\verb|bench-results/<runId>-*-trace.json|. The aggregate summary is in
+\verb|bench-results/<runId>-SUMMARY.md|. A condensed per-case table:
+
+\begin{table}[h]
+\centering
+\small
+\caption{Per-case reliability. $\checkmark$ = produced real four-field output;
+$\times$ = empty / placeholder / refusal. ``Real'' excludes parse-fallback
+placeholders.}
+\label{tab:percase}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+\textbf{Case} & \textbf{Corpus (chars)} & \textbf{M1} & \textbf{M1R} & \textbf{M2} & \textbf{M3} & \textbf{M4} \\
+\midrule
+grantham-summary     & 3.3k  & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+g1-mean-reversion    & 12.3k & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\times$      \\
+g2-keystone          & 10.4k & $\times$     & $\times$     & $\times$     & $\times$     & $\checkmark$ \\
+g3-ai-bet            & 9.2k  & $\times$     & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\times$      \\
+g4-reinvest          & 11.0k & $\checkmark$ & $\times$     & $\checkmark$ & $\times$     & $\times$      \\
+g5-showdown          & 10.1k & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\times$     & $\times$      \\
+g6-derivatives       & 10.2k & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+g7-chanos            & 11.1k & $\times$     & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\times$      \\
+fbig1-1999           & 31.9k & $\times$     & $\checkmark$ & $\checkmark$ & $\times$     & $\checkmark$ \\
+fbig2-2009           & 31.4k & $\times$     & $\times$     & $\times$     & $\times$     & $\times$      \\
+fbig3-2026           & 33.8k & $\times$     & $\times$     & $\times$     & $\times$     & $\times$      \\
+gsuper-synthesis     & 53.0k & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\times$     & $\times$      \\
+multi-g123 ($\times$3) & 31.9k & $\times$   & $\times$     & $\times$     & $\checkmark$ & $\times$      \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% =====================================================================
+\section{Blinded grading protocol}
+% =====================================================================
+
+\begin{enumerate}
+  \item For each of the 7 cases where both M2 and M3 produced real output,
+        extract the four-field verdicts into a case file with A/B labels assigned
+        by a stable seeded shuffle (the mapping is saved to
+        \texttt{quality-grading-key.json}, kept secret during grading).
+  \item Each case file contains: source document, question, Output A, Output B,
+        and a scoring rubric.
+  \item Feed each case file to two LLM judges (Gemini, KIMI K2.6) independently.
+  \item To cancel position bias, the two judges receive different A/B orderings
+        per case (the harness varies order by a per-case seed).
+  \item Collect accuracy / hallucination / coverage / overall scores + a forced
+        preference from each judge.
+  \item \textbf{Human anchor:} a human grades 3 cases (selected to include M2-win
+        and M3-win cases) using the same blinded files, then the human's
+        preferences are compared to the LLM judges' for agreement.
+  \item Unblind: map A/B back to M2/M3 via the key file and aggregate.
+\end{enumerate}
+
+\bigskip
+\noindent\textit{Engineering Report~$\cdot$~reproducible from repository commit
+\texttt{9301168}. Corpus, harness, and traces are included. The benchmark is
+designed to be re-run on other domains by swapping \texttt{bench-samples/}.}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}

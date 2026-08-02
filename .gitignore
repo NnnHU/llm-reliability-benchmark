@@ -1,0 +1,45 @@
+# ---- LaTeX build products ----
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.synctex(busy)
+*.nav
+*.snm
+*.vrb
+*.bcf
+*.run.xml
+*.xdv
+# NOTE: main.pdf IS committed (so readers can preview it on GitHub without compiling).
+# Only stray/intermediate PDFs elsewhere are ignored.
+*.pdf
+!paper/arxiv/main.pdf
+
+# ---- OS / editor cruft ----
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/
+.zcode/
+
+# ---- Node (only relevant if running the benchmark locally) ----
+node_modules/
+package-lock.json
+yarn.lock
+
+# ---- Local-only corpus transcripts (NOT redistributed; see benchmark/samples/CORPUS.md) ----
+benchmark/samples/*.txt
+benchmark/bench-results/
+bench-results/
+.env
+.env.*
+!*.env.example
